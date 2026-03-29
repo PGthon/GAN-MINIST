@@ -16,16 +16,20 @@ from model import Generator, Discriminator
 
 # 随机噪声的维度，你可以理解为"种子"
 # 生成器接收这个100维的随机向量，输出28x28的图片
-latent_dim = 100
+latent_dim = 256
 
 # 批量大小 - 每次训练用多少张图片
-batch_size = 512
+batch_size = 256
 
 # 学习率 - 控制模型学习的步长
 lr = 0.0002
 
 # 训练轮数 - 完整遍历数据集的次数
-epochs = 10
+epochs = 100
+
+# 限制训练样本数量（设为None则使用全部60000张）
+# 比如只训练6000张，可以加快训练速度
+limit_samples = 60000
 
 # 图片大小 (MNIST是28x28)
 img_shape = 28 * 28  # 784
@@ -62,7 +66,12 @@ def generate_and_save_images(generator, latent_dim, n_samples=16):
 
 
 # 训练函数
-def train(batch_size=None):
+def train():
+    # 用于记录损失值
+    d_losses = []
+    g_losses = []
+    steps = []
+
     # 初始化生成器
     generator = Generator(latent_dim, img_shape)
     # 初始化判别器
@@ -79,25 +88,26 @@ def train(batch_size=None):
     optimizer_G = optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.999))
     optimizer_D = optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
 
-    # 获取数据加载器
-    train_loader, _ = get_dataloader(batch_size)
+    # 获取数据加载器（带样本数量限制）
+    train_loader, _ = get_dataloader(batch_size, limit_samples)
 
     # 训练循环
+    step_count = 0
     for epoch in range(epochs):
         for i, (imgs, _) in enumerate(train_loader):
-            batch_size = imgs.size(0)
+            batch_size_current = imgs.size(0)
 
             # 将数据移到GPU上
             imgs = imgs.to(device)
-            real_labels = torch.ones(batch_size, 1).to(device)
-            fake_labels = torch.zeros(batch_size, 1).to(device)
+            real_labels = torch.ones(batch_size_current, 1).to(device)
+            fake_labels = torch.zeros(batch_size_current, 1).to(device)
 
             # 训练判别器
             optimizer_D.zero_grad()
             real_outputs = discriminator(imgs)
             d_loss_real = criterion(real_outputs, real_labels)
 
-            z = torch.randn(batch_size, latent_dim).to(device)
+            z = torch.randn(batch_size_current, latent_dim).to(device)
             fake_imgs = generator(z)
             fake_outputs = discriminator(fake_imgs.detach())
             d_loss_fake = criterion(fake_outputs, fake_labels)
@@ -108,7 +118,7 @@ def train(batch_size=None):
 
             # 训练生成器
             optimizer_G.zero_grad()
-            z = torch.randn(batch_size, latent_dim).to(device)
+            z = torch.randn(batch_size_current, latent_dim).to(device)
             fake_imgs = generator(z)
             fake_outputs = discriminator(fake_imgs)
             g_loss = criterion(fake_outputs, real_labels)
@@ -116,8 +126,25 @@ def train(batch_size=None):
             g_loss.backward()
             optimizer_G.step()
 
-            if (i + 1) % 100 == 0:
-                print(f'Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], D Loss: {d_loss.item():.4f}, G Loss: {g_loss.item():.4f}')
+            # 记录损失值
+            step_count += 1
+            if step_count % 50 == 0:
+                d_losses.append(d_loss.item())
+                g_losses.append(g_loss.item())
+                steps.append(step_count)
+                print(f'Epoch [{epoch+1}/{epochs}], Step [{step_count}], D Loss: {d_loss.item():.4f}, G Loss: {g_loss.item():.4f}')
+
+    # 绘制训练曲线
+    plt.figure(figsize=(10, 5))
+    plt.plot(steps, d_losses, label='D Loss', alpha=0.7)
+    plt.plot(steps, g_losses, label='G Loss', alpha=0.7)
+    plt.xlabel('Step')
+    plt.ylabel('Loss')
+    plt.title('GAN Training Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('training_loss.png')
+    plt.show()
 
     # 保存模型
     torch.save(generator.cpu().state_dict(), 'generator.pth')

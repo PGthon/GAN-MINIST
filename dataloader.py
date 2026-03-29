@@ -31,18 +31,29 @@ test_dataset = torchvision.datasets.MNIST(
 )
 
 # 创建数据加载器函数
-def get_dataloader(batch_size):
+def get_dataloader(batch_size, limit_samples=None):
     # 训练数据加载器
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,  # 批量大小
-        shuffle=True,  # 打乱数据
-        num_workers=0  # 多线程加载
-    )
+    if limit_samples:
+        # 限制样本数量时，使用sampler，不能同时用shuffle
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0,
+            sampler=torch.utils.data.SubsetRandomSampler(range(limit_samples))
+        )
+    else:
+        # 不限制样本数量时，正常使用shuffle
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=0
+        )
     # 测试数据加载器
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
-        shuffle=False  # 测试集不需要打乱
+        shuffle=False
     )
     return train_loader, test_loader
