@@ -24,7 +24,7 @@ class Generator(nn.Module):
             # tanh激活函数，将输出限制在[-1, 1]，与数据归一化范围一致
             nn.Tanh()
         )
-    
+
     def forward(self, z):
         # 前向传播：将噪声向量输入网络
         img = self.model(z)
@@ -54,10 +54,75 @@ class Discriminator(nn.Module):
             # sigmoid激活函数，将输出映射到0-1之间的概率
             nn.Sigmoid()
         )
-    
+
     def forward(self, img):
         # 将图像展开为一维向量
         img_flat = img.view(img.size(0), -1)
         # 前向传播：将展开的图像输入网络
         validity = self.model(img_flat)
+        return validity
+
+
+# ==================== cGAN 模型 ====================
+# 条件GAN：输入噪声+标签，输出指定标签的图片
+
+class cGAN_Generator(nn.Module):
+    def __init__(self, latent_dim, num_classes, img_shape):
+        super(cGAN_Generator, self).__init__()
+        self.latent_dim = latent_dim
+        self.num_classes = num_classes
+
+        # 噪声和标签的embedding层
+        # 将噪声和标签拼接后的总输入维度 = latent_dim + num_classes
+        input_dim = latent_dim + num_classes
+
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, img_shape),
+            nn.Tanh()
+        )
+
+    def forward(self, z, labels):
+        # 将噪声和标签拼接
+        # z: (batch_size, latent_dim)
+        # labels: (batch_size, num_classes) one-hot编码
+        gen_input = torch.cat([z, labels], dim=1)
+        img = self.model(gen_input)
+        img = img.view(img.size(0), 1, 28, 28)
+        return img
+
+
+class cGAN_Discriminator(nn.Module):
+    def __init__(self, num_classes, img_shape):
+        super(cGAN_Discriminator, self).__init__()
+        self.num_classes = num_classes
+
+        # 图片和标签拼接后的总输入维度 = img_shape + num_classes
+        input_dim = img_shape + num_classes
+
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, 1024),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            nn.Linear(1024, 512),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, img, labels):
+        # 将图片和标签拼接
+        # img: (batch_size, 1, 28, 28)
+        # labels: (batch_size, num_classes) one-hot编码
+        img_flat = img.view(img.size(0), -1)
+        d_input = torch.cat([img_flat, labels], dim=1)
+        validity = self.model(d_input)
         return validity

@@ -57,3 +57,12 @@ def get_dataloader(batch_size, limit_samples=None):
         shuffle=False
     )
     return train_loader, test_loader
+
+
+# 标签转换为one-hot编码的函数
+# num_classes = 10 (数字0-9)
+def labels_to_onehot(labels, num_classes=10):
+    batch_size = labels.size(0)
+    onehot = torch.zeros(batch_size, num_classes)
+    onehot.scatter_(1, labels.view(-1, 1), 1)
+    return onehot
